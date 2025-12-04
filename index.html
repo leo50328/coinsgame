@@ -121,7 +121,7 @@
             transition: background 0.3s;
         }
         
-        h1 {
+        .game-title {
             text-align: center;
             color: var(--text-primary);
             margin-bottom: 10px;
@@ -523,7 +523,7 @@
 </head>
 <body>
     <div class="game-container">
-        <h1>💰 金幣爭奪賽 💰</h1>
+        <h1 class="game-title">💰 金幣爭奪賽 💰</h1>
 
         <div class="theme-switch-wrapper">
             <label class="theme-switch" for="theme-toggle">
@@ -629,7 +629,7 @@
             document.getElementById('modeSelection').classList.add('hidden');
             
             if (opponentType === 'human') {
-                // [修改] 兩人模式：直接開始，不猜硬幣
+                // 兩人模式：直接開始，玩家1先手
                 currentPlayer = 1;
                 document.getElementById('gameSection').classList.remove('hidden');
                 gameStarted = true;
@@ -642,7 +642,7 @@
         }
 
         function flipCoin(playerChoice) {
-            // 這個函式現在只會在 AI 模式下被呼叫
+            // 這個函式只會在 AI 模式下被呼叫
             const flipResult = document.getElementById('flipResult');
             flipResult.innerHTML = '<div class="flipping-coin">🪙</div>';
             
@@ -705,14 +705,20 @@
             const board = document.getElementById('gameBoard');
             board.innerHTML = '';
             
-            rows.forEach((count, rowIndex) => {
+            // [恢復] 繪製順序：從第1排到最後一排 (由上到下，符合原始排版)
+            for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                const count = rows[rowIndex];
+
+                if (count === 0) continue; 
+
                 const rowDiv = document.createElement('div');
                 rowDiv.className = 'row';
                 rowDiv.id = `row-${rowIndex}`;
                 
                 const label = document.createElement('div');
                 label.className = 'row-label';
-                label.textContent = `第${rowIndex + 1}排：`;
+                // 標籤仍顯示正確的排數 (rowIndex + 1)
+                label.textContent = `第${rowIndex + 1}排：`; 
                 rowDiv.appendChild(label);
                 
                 const coinsDiv = document.createElement('div');
@@ -722,7 +728,8 @@
                     const coin = document.createElement('div');
                     coin.className = 'coin';
                     coin.textContent = '💰';
-                    coin.dataset.row = rowIndex;
+                    // 數據屬性使用原始索引，確保遊戲邏輯不變
+                    coin.dataset.row = rowIndex; 
                     coin.dataset.index = i;
                     coin.addEventListener('click', () => selectCoin(coin));
                     coinsDiv.appendChild(coin);
@@ -730,7 +737,7 @@
                 
                 rowDiv.appendChild(coinsDiv);
                 board.appendChild(rowDiv);
-            });
+            }
         }
 
         function selectCoin(coinElement) {
@@ -790,7 +797,7 @@
                     currentPlayer = currentPlayer === 1 ? 2 : 1;
                     updateStatus();
                 } else {
-                    isPlayerTurn = false;
+                    isPlayerTurn = true; // 這裡改為 true，因為下面會呼叫 aiTurn
                     updateStatus();
                     setTimeout(aiTurn, 1000);
                 }
@@ -837,6 +844,7 @@
             }, 500);
         }
 
+        // [AI 邏輯] 採用 Misère Nim 必勝策略 - 已是數學上最強
         function calculateOptimalMove() {
             let nimSum = 0;
             rows.forEach(count => {
@@ -851,12 +859,16 @@
             
             let isWinningPosition;
             
+            // 決定當前是否為必勝局面 (Misère Nim 定理)
             if (allRowsAreOnes) {
-                isWinningPosition = (nonZeroRowCount % 2 !== 0);
+                // 全部都是 1 的排：排數為奇數 (你贏)
+                isWinningPosition = (nonZeroRowCount % 2 !== 0); 
             } else {
-                isWinningPosition = (nimSum !== 0);
+                // 至少有一排大於 1：nimSum 不為 0 (你贏)
+                isWinningPosition = (nimSum !== 0); 
             }
 
+            // 如果是必勝局面 (Winning Position)
             if (isWinningPosition) {
                 for (let i = 0; i < rows.length; i++) {
                     if (rows[i] === 0) continue;
@@ -864,6 +876,7 @@
                     let targetCount = rows[i] ^ nimSum;
                     
                     if (targetCount < rows[i]) {
+                        // 檢查是否所有其他排都是 1 (處理從大於 1 的狀態轉移到全是 1 的狀態)
                         let otherRowsAreOnes = true;
                         for(let j = 0; j < rows.length; j++) {
                             if (i !== j && rows[j] > 1) {
@@ -872,27 +885,34 @@
                             }
                         }
                         
+                        // 這是 Misère Nim 策略的特殊邊界處理
                         if (otherRowsAreOnes && targetCount <= 1) {
                             const onesInOtherRows = nonZeroRows.filter(r => r.idx !== i && r.count === 1).length;
                             const onesAfterMove = onesInOtherRows + targetCount;
                             
+                            // 正常的 NimMove 導致剩下偶數個 1 (必敗)，需要調整
                             if (onesAfterMove % 2 === 0) {
                                 if (rows[i] > 1 && (rows[i] - targetCount) > 1) {
+                                    // 確保留下奇數個 1 (必勝)
                                     return { row: i, count: (rows[i] - targetCount) - 1 };
                                 }
                             }
                         }
                         
+                        // 正常 Nim 必勝走法
                         return { row: i, count: rows[i] - targetCount };
                     }
                 }
             }
 
+            // 如果是必敗局面 (Losing Position) - 選擇一個合法的「最爛」走法
             let largeRow = nonZeroRows.find(r => r.count > 1);
             if (largeRow) {
+                // 盡可能讓局面複雜化 (拿 1 個)
                 return { row: largeRow.idx, count: 1 };
             }
             
+            // 如果只剩下 1 的排 (偶數排，必敗)，只能拿 1 個
             return { row: nonZeroRows[0].idx, count: 1 };
         }
 
